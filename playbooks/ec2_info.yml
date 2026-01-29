@@ -1,0 +1,25 @@
+---
+- name: Get EC2 instance info
+  hosts: localhost
+  gather_facts: false
+  collections:
+    - amazon.aws
+
+  tasks:
+    - name: Query EC2 instance
+      amazon.aws.ec2_instance_info:
+        region: ap-east-1
+        instance_ids:
+          - i-0d33f7033e3bca537
+      register: ec2_info
+
+    - name: Show EC2 details
+      debug:
+        msg:
+          InstanceID: "{{ ec2_info.instances[0].instance_id }}"
+          Name: "{{ ec2_info.instances[0].tags.Name | default('') }}"
+          State: "{{ ec2_info.instances[0].state.name }}"
+          InstanceType: "{{ ec2_info.instances[0].instance_type }}"
+          PublicIP: "{{ ec2_info.instances[0].public_ip_address | default('') }}"
+          PrivateIP: "{{ ec2_info.instances[0].private_ip_address | default('') }}"
+

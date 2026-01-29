@@ -1,0 +1,9 @@
+---
+- name: Ping asladmin host
+  hosts: asl
+  gather_facts: no
+
+  tasks:
+    - name: Test connectivity with ping module
+      ansible.builtin.ping:
+

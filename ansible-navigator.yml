@@ -1,0 +1,6 @@
+ansible-navigator:
+  execution-environment:
+    enabled: true
+    image: 172.16.168.204/ee/test:latest
+    pull:
+      policy: missing

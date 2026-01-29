@@ -1,0 +1,18 @@
+[linux]
+rhel01 ansible_host=172.16.168.202 
+
+[linux:vars]
+ansible_user=asladmin 
+ansible_password=P@ssw0rd
+
+
+[windows]
+win01 ansible_host=172.16.168.41
+
+[windows:vars]
+ansible_user=Administrator
+ansible_password=ASL_P@ssw0rd_
+ansible_connection=winrm
+ansible_winrm_transport=ntlm
+ansible_winrm_server_cert_validation=ignore
+

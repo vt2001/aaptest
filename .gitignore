@@ -1,0 +1,16 @@
+# logs
+*.log
+ansible-navigator.log
+
+# ansible
+.ansible/
+*.retry
+
+# python
+__pycache__/
+*.pyc
+
+# editor
+.vscode/
+.idea/
+.DS_Store
