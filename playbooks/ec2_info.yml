@@ -36,8 +36,10 @@
     - name: Query EBS volume information
       amazon.aws.ec2_vol_info:
         region: "{{ aws_region }}"
-        volume_ids: "{{ ebs_volume_ids }}"
+        filters:
+          volume-id: "{{ ebs_volume_ids }}"
       register: ebs_info
+
 
     - name: Display EC2 instance information
       debug:
