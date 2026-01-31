@@ -5,6 +5,7 @@ win01 ansible_host=172.16.168.41
 ansible_user=Administrator
 ansible_password=ASL_P@ssw0rd_
 ansible_connection=winrm
+ansible_port=5985
 ansible_winrm_transport=ntlm
 ansible_winrm_server_cert_validation=ignore
 

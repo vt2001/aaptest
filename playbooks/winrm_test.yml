@@ -1,8 +1,18 @@
 ---
 - name: windows_ping
-  hosts: win01
+  hosts: windows
   gather_facts: false
 
   tasks:
     - name: Ping Windows host via WinRM
       ansible.windows.win_ping:
+      register: r
+
+    - name: Show pong in output (AAP UI)
+      ansible.builtin.debug:
+        msg:
+          host: "{{ inventory_hostname }}"
+          ansible_host: "{{ ansible_host | default(inventory_hostname) }}"
+          result: "{{ r.ping | default('no-ping-field') }}"
+          ok: "{{ r.ping is defined }}"
+
