@@ -1,0 +1,75 @@
+---
+- name: Hyper-V information via WinRM
+  hosts: windows
+  gather_facts: false
+
+  tasks:
+    - name: Verify Hyper-V PowerShell module exists
+      ansible.windows.win_powershell:
+        script: |
+          if (Get-Command Get-VM -ErrorAction SilentlyContinue) {
+            "Hyper-V module present"
+          } else {
+            throw "Hyper-V PowerShell module not found"
+          }
+      register: hyperv_check
+      changed_when: false
+
+    - name: Show Hyper-V module check
+      ansible.builtin.debug:
+        msg: "{{ hyperv_check.output[0] }}"
+      changed_when: false
+
+    - name: Get Hyper-V host info (JSON)
+      ansible.windows.win_powershell:
+        script: |
+          Get-VMHost |
+            Select-Object ComputerName, LogicalProcessorCount, MemoryCapacity, VirtualMachinePath, VirtualHardDiskPath |
+            ConvertTo-Json -Depth 3
+      register: vmhost
+      changed_when: false
+
+    - name: Show Hyper-V host info (AAP UI)
+      ansible.builtin.debug:
+        msg: "{{ vmhost.output[0] | from_json }}"
+      changed_when: false
+
+    - name: Get Hyper-V VMs (normalized list + formatted uptime)
+      ansible.windows.win_powershell:
+        script: |
+          $stateMap = @{
+            0 = "Unknown"
+            2 = "Running"
+            3 = "Off"
+            32768 = "Paused"
+            32769 = "Suspended"
+            32770 = "Starting"
+            32771 = "Saving"
+            32773 = "Stopping"
+          }
+
+          $vms = Get-VM | ForEach-Object {
+            $u = $_.Uptime
+            $uptimeFormatted = "{0:00}d {1:00}h {2:00}m {3:00}s" -f `
+              $u.Days, $u.Hours, $u.Minutes, $u.Seconds
+
+            [pscustomobject]@{
+              Name           = $_.Name
+              State          = $stateMap[[int]$_.State]
+              Status         = $_.Status
+              CPUUsage       = $_.CPUUsage
+              MemoryAssigned = $_.MemoryAssigned
+              Uptime         = $uptimeFormatted
+              Version        = $_.Version
+            }
+          }
+
+          @($vms) | ConvertTo-Json -Depth 4
+      register: vms
+      changed_when: false
+
+    - name: Show VM list (AAP UI)
+      ansible.builtin.debug:
+        msg: "{{ vms.output[0] | from_json }}"
+      changed_when: false
+
