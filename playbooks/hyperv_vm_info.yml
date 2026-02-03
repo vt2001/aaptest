@@ -1,0 +1,108 @@
+---
+- name: Hyper-V VM inventory (IPs + kernel version + storage)
+  hosts: windows
+  gather_facts: false
+
+  tasks:
+    - name: Collect VM inventory from Hyper-V host
+      ansible.windows.win_powershell:
+        script: |
+          $ErrorActionPreference = 'Stop'
+
+          function Get-GuestKvpInfo {
+            param([string]$VmName)
+
+            try {
+              $cimVm = Get-CimInstance -Namespace root\virtualization\v2 `
+                       -ClassName Msvm_ComputerSystem `
+                       -Filter ("ElementName='{0}'" -f $VmName)
+              if (-not $cimVm) { return $null }
+
+              $kvpComp = Get-CimAssociatedInstance -Namespace root\virtualization\v2 `
+                        -InputObject $cimVm -Association Msvm_SystemDevice |
+                        Where-Object { $_.CimClass.CimClassName -eq 'Msvm_KvpExchangeComponent' }
+              if (-not $kvpComp) { return $null }
+
+              $raw = $kvpComp.GuestIntrinsicExchangeItems
+              if (-not $raw) { return $null }
+
+              $pairs = @{}
+              foreach ($item in $raw) {
+                try {
+                  $xml  = [xml]$item
+                  $name = ($xml.INSTANCE.PROPERTY | Where-Object { $_.NAME -eq 'Name' }).VALUE
+                  $data = ($xml.INSTANCE.PROPERTY | Where-Object { $_.NAME -eq 'Data' }).VALUE
+                  if ($name) { $pairs[$name] = $data }
+                } catch {}
+              }
+
+              [pscustomobject]@{
+                OSName        = $pairs['OSName']
+                KernelVersion = $pairs['OSVersion']
+              }
+            } catch {
+              return $null
+            }
+          }
+
+          $out = foreach ($vm in Get-VM) {
+
+            # IP addresses (best-effort via integration services)
+            $ips = @()
+            $adapters = Get-VMNetworkAdapter -VMName $vm.Name -ErrorAction SilentlyContinue
+            if ($adapters) {
+              $ips = $adapters | ForEach-Object { $_.IPAddresses } |
+                    Where-Object { $_ } | Select-Object -Unique
+            }
+
+            # Storage (host-side VHD/VHDX)
+            $diskInfo = @()
+            $disks = Get-VMHardDiskDrive -VMName $vm.Name -ErrorAction SilentlyContinue
+            foreach ($d in ($disks | Where-Object { $_.Path })) {
+              $vhd = $null
+              try { $vhd = Get-VHD -Path $d.Path -ErrorAction Stop } catch {}
+
+              $sizeBytes = if ($vhd) { [int64]$vhd.Size } else { $null }
+              $fileBytes = if ($vhd) { [int64]$vhd.FileSize } else { $null }
+
+              $diskInfo += [pscustomobject]@{
+                Path          = $d.Path
+                VhdType       = if ($vhd) { $vhd.VhdType } else { $null }
+                Format        = if ($vhd) { $vhd.VhdFormat } else { $null }
+                SizeBytes     = $sizeBytes
+                FileSizeBytes = $fileBytes
+                SizeGB        = if ($sizeBytes) { [Math]::Round($sizeBytes / 1GB, 2) } else { $null }
+                FileSizeGB    = if ($fileBytes) { [Math]::Round($fileBytes / 1GB, 2) } else { $null }
+                UsedPct       = if ($sizeBytes -and $fileBytes) {
+                                  [Math]::Round(($fileBytes / $sizeBytes) * 100, 2)
+                                } else { $null }
+              }
+            }
+
+            [pscustomobject]@{
+              Name   = $vm.Name
+              State  = [int]$vm.State
+              Status = $vm.Status
+              IPs    = @($ips)
+              Guest  = Get-GuestKvpInfo -VmName $vm.Name
+              Disks  = @($diskInfo)
+            }
+          }
+
+          @($out) | ConvertTo-Json -Depth 8
+      register: discovered
+      changed_when: false
+
+    - name: Parse JSON and force list
+      ansible.builtin.set_fact:
+        vm_list: >-
+          {{ [ (discovered.output[0] | from_json) ]
+             if (discovered.output[0] | from_json) is mapping
+             else (discovered.output[0] | from_json) }}
+      changed_when: false
+
+    - name: Show VM inventory (AAP UI)
+      ansible.builtin.debug:
+        msg: "{{ vm_list }}"
+      changed_when: false
+
